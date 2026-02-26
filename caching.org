@@ -11,7 +11,6 @@ Compile me with:
 
 Suppose there is an arbitrary sequence of packages that you want to compile, possibly containing repeats.
 Compiling from source can be expensive, so your package manager can cache certain packages that may be reused in future request.
-
 In a package request,
 
 - If the package is in the cache (called a "hit"), the compiled package is copied from the cache, incurring negligible cost.
@@ -19,34 +18,42 @@ In a package request,
 - Otherwise (called a "miss"), the package manager has to request the dependencies of the package (recursively), and compile the package.
   Compiling incurs a cost associated with that package.
   The newly compiled package can be stored in the cache for future reuse.
-  However, if the sum of the sizes of the packages in the cache exceeds the cache's total allowed size, the "cache policy" must determine which packages to evict, until the size is not exceeded.
+  However, if the sum of the sizes of the packages in the cache exceeds the cache's total allowed size, the "cache eviction policy" must determine which packages to evict, until the size is not exceeded.
 
-What's the best eviction policy to minimize the total cost of compiling each request?
+What's the optimal cache eviction policy that minimizes the total cost of compiling each request?
 
-Note that the cost of compiling a package depends on whether or not its dependencies are in the cache (how far the recursion has to go).
-E.g., suppose the user wants to acquire Chromium. If Chromium hits, it is retrieved for free. Otherwise, if Chromium's build-dependency Ninja hits, the cost is just the compilation of Chromium. If both miss, the cost will be the compilation of Chromium plus the compilation of Ninja.
+Note that the cost of compiling a package depends on whether or not its dependencies are in the cache (how far the recursion has to go to build the dependencies).
 
 The nearest studied question in prior work assumes each package would have a fixed cost (see Prior Work for details).
 I think that *baseline would be easy to beat* by a policy that pays /some/ attention to the dependency structure.
 This would lead to improvements for real-world programs (see Applications and Empirical Evaluation).
 This is not a case where we trade off one cost for another; improving the caching policy increases the cache hit ratio *for free.*
 
+\pagebreak
+
 * Prior work
-** Prior work on caching
+** Prior work on caching problems
 
-TODO introduce caching problem.
+In a general "caching problem":
+1. We have "objects" each with a "size in cache" and a "cost to recompute".
+2. We have a cache with a fixed capacity:
+   the sum of the size of the objects in the cache must be less than that capacity.
+3. We have a sequence of requests for a particular objects:
+   if the requested object is in the cache, the cost is low; otherwise, the cost is higher.
+4. The problem is to serve a sequence of requests to various objects with minimal cost.
 
+Other "caching problems" make stronger assumptions, such as: all objects cost the same or all objects have the same size, such as page caching (i.e., for an OS kernel to manage pages of memory).
 Package caching relates to other caching problems thusly:
 
 
-| Caching problem       | Cost to re-compute  | Size in cache       |
-|-----------------------+---------------------+---------------------|
-| Page caching          | Fixed               | Fixed               |
-| Variable-page caching | Fixed               | Fn of cached object |
-| Document caching      | Fn of cached object | Fn of cached object |
-| Package caching       | Fn of cache         | Fn of cached object |
+| Caching problem                    | Cost to re-compute  | Size in cache       |
+|------------------------------------+---------------------+---------------------|
+| Page caching                       | Fixed               | Fixed               |
+| Variable-page caching              | Fixed               | Fn of cached object |
+| Document caching                   | Fn of cached object | Fn of cached object |
+| Package caching (proposed problem) | Fn of cache         | Fn of cached object |
 
-Unlike prior problems, the cost to re-compute a package is not only dependent on the package itself, but also on which other packages are cached. E.g., if CMake is cached, recompiling Firefox will be easier than if CMake is not cached (would have compile CMake first).
+Unlike prior caching problems, the cost to re-compute a package is not only dependent on the package itself, but also on which other packages are cached. E.g., if Ninja is cached, recompiling Chromium will be easier than if Ninja is not cached (would have compile Ninja in order to compile Chromium).
 
 Prior work discusses differing assumptions about the known request trace:
 
@@ -331,7 +338,7 @@ It is possible that one should solve the steady-state problem at every time step
    1. Topologically sort the DAG of $P$ given by $D$.
    2. For each $p$ in topological order, compute and store $c'(p, H)$, which involves taking a sum over $D(p)$. In this order, all recurrences will be already computed when needed.
 
-- *Can quickly compute cost over variations of $H$* by the following algorithm,
+- *Can quickly compute cost over variations of* $H$ by the following algorithm,
 
   1. Input $H$, $c'(p, H)$, and a variation $H'$ whose cost $c'(p, H')$ we wish to comppute.
   2. Use the topological sort of $D(p)$ already computed (amortized $\mathcal{O}(1)$).
@@ -339,10 +346,10 @@ It is possible that one should solve the steady-state problem at every time step
 
 - *NP-hardness*
 
-3. A special case of steady-state package caching, where no packages depend on anything else, is reducible to 0-1 Knapsack.
-   The value of each package in the knapsack problem would be set to the expected value of cost saved if that package were cached, $c'(p, H) = c(p)f(p)$.
-   Therefore steady-state package caching is NP-complete.
-   The best we could hope for is an approximate algorithm or approximation scheme.
+  1. A special case of steady-state package caching, where no packages depend on anything else, is reducible to 0-1 Knapsack.
+     The value of each package in the knapsack problem would be set to the expected value of cost saved if that package were cached, $c'(p, H) = c(p)f(p)$.
+     Therefore steady-state package caching is NP-complete.
+     The best we could hope for is an approximate algorithm or approximation scheme.
 
 Steady-state package caching is similar to 0-1 knapsack, except in steady-state package caching the expected value of value ($c'(p, H)f(p)$) depends on what packages are in the cache, (see definition of $c'(p, H)$).
 If the dependencies of $p$ are not in the cache, the value of caching $p$ is greater compared to the case where they are in the cache.
